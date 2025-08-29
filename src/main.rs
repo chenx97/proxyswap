@@ -31,18 +31,21 @@ fn main() -> Result<()> {
     };
     let sspath: PathBuf = PathBuf::from("/etc/shadowsocks");
     env::set_current_dir(sspath)?;
+    let confpath = PathBuf::from("config.json");
     let mut configs: Vec<SSConfig> = vec![];
-    let mut current: Option<PathBuf> = None;
+    let current: Option<PathBuf> = if confpath.is_symlink() {
+        Some(std::fs::read_link(&confpath)?)
+    } else {
+        None
+    };
     if let Ok(x) = std::fs::read_dir(PathBuf::from(".")) {
         for dir in x {
             if let Ok(entry) = dir {
                 let path = PathBuf::from(entry.file_name());
-                if path == PathBuf::from("config.json") {
-                    if path.is_symlink() {
-                        current.replace(std::fs::read_link(path)?);
+                if path != confpath {
+                    if current.is_none() || current.clone().unwrap() != path {
+                        configs.push(SSConfig { file: path });
                     }
-                } else if current.is_none() || current.clone().unwrap() != path {
-                    configs.push(SSConfig { file: path });
                 }
             }
         }
@@ -66,10 +69,12 @@ fn main() -> Result<()> {
     if !status.success() {
         exit(status.code().unwrap_or_else(|| 1));
     }
-    std::fs::remove_file("config.json")?;
+    if confpath.exists() {
+        std::fs::remove_file(&confpath)?;
+    }
 
     println!("{} -> config.json", new_conf);
-    std::os::unix::fs::symlink(new_conf.file, "config.json")?;
+    std::os::unix::fs::symlink(new_conf.file, &confpath)?;
     let status = Command::new("ss-tproxy").arg("start").spawn()?.wait()?;
     if !status.success() {
         exit(status.code().unwrap_or_else(|| 1));
