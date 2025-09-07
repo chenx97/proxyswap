@@ -5,5 +5,8 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.99"
+i18n-embed = { version = "0.16.0", features = ["desktop-requester", "fluent-system"] }
+i18n-embed-fl = "0.10.0"
 inquire = "0.7.5"
+rust-embed = "8.7.2"
 rustix = { version = "1.0.8", features = ["process"] }

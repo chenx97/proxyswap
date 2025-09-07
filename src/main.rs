@@ -3,9 +3,12 @@ use std::fmt::Display;
 use std::path::PathBuf;
 use std::process::{Command, exit};
 
+mod lang;
 use anyhow::Result;
+use i18n_embed::{DesktopLanguageRequester, Localizer};
 use inquire::Select;
 use inquire::ui::{Color, RenderConfig, StyleSheet, Styled};
+use lang::{LANGUAGE_LOADER, localizer};
 
 struct SSConfig {
     file: PathBuf,
@@ -17,9 +20,25 @@ impl Display for SSConfig {
     }
 }
 
+fn init_localizer() {
+    let localizer = localizer();
+    let requested_languages = DesktopLanguageRequester::requested_languages();
+
+    if let Err(error) = localizer.select(&requested_languages) {
+        eprintln!("Error while loading languages for library_fluent {}", error);
+    }
+
+    // Windows Terminal doesn't support bidirectional (BiDi) text, and renders the isolate characters incorrectly.
+    // This is a temporary workaround for https://github.com/microsoft/terminal/issues/16574
+    // TODO: this might break BiDi text, though we don't support any writing system depending on that.
+    LANGUAGE_LOADER.set_use_isolating(false);
+}
+
 fn main() -> Result<()> {
+    init_localizer();
+
     if !rustix::process::geteuid().is_root() {
-        panic!("Please run as root");
+        panic!("{}", fl!("request-root"));
     }
     let render_config = RenderConfig {
         help_message: StyleSheet::empty().with_fg(Color::LightBlue),
@@ -54,7 +73,11 @@ fn main() -> Result<()> {
     if let Some(cur) = &current {
         configs.insert(0, SSConfig { file: cur.clone() });
     }
-    let result = Select::new("select your config", configs).with_render_config(render_config);
+    let config_sel_string = fl!("select-config");
+    let help = fl!("help-msg");
+    let result = Select::new(&config_sel_string, configs)
+        .with_help_message(&help)
+        .with_render_config(render_config);
     let new_conf = result.prompt()?;
     println!(
         "Old config: {}",
